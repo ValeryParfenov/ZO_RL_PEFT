@@ -18,6 +18,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 
 from collections import defaultdict
 import inspect
+import json
 import math
 import os
 import re
@@ -776,8 +777,14 @@ class OurTrainer(Trainer):
                 if step % args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
+                diag_every = getattr(args, "ldsd_diag_every", 0)
+                if diag_every and args.trainer == "zo_rl_sgd" and self.state.global_step % diag_every == 0:
+                    self.optimizer.diag_grads = self._true_grads(model, inputs)
                 closure = self.create_closure(model, inputs)
-                tr_loss_step = self.optimizer.step(closure)     
+                tr_loss_step = self.optimizer.step(closure)
+                if getattr(self.optimizer, "last_diag", None) is not None:
+                    self._write_ldsd_diag(self.optimizer.last_diag, tr_loss_step)
+                    self.optimizer.last_diag = None
                 self.lr_scheduler.step()
                 # print(f"Step {total_steps}, LR: {self.optimizer.param_groups[0]['lr']}")
 
@@ -947,6 +954,26 @@ class OurTrainer(Trainer):
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
+
+    def _true_grads(self, model, inputs):
+        """Minibatch gradient at x_t: same batch, loss and eval mode as the ZO closure."""
+        model.eval()
+        params = [p for group in self.optimizer.param_groups for p in group["params"]]
+        with torch.enable_grad():
+            batch = self._prepare_inputs(inputs)
+            with self.compute_loss_context_manager():
+                loss = self.compute_loss(model, batch)
+            grads = torch.autograd.grad(loss, params, allow_unused=True)
+        return [torch.zeros_like(p) if g is None else g.detach() for p, g in zip(params, grads)]
+
+    def _write_ldsd_diag(self, diag, loss):
+        """Append one diagnostics record to <output_dir>/ldsd_diag.jsonl and log a summary."""
+        record = {"step": self.state.global_step, "loss": float(loss), **diag}
+        with open(os.path.join(self.args.output_dir, "ldsd_diag.jsonl"), "a") as f:
+            f.write(json.dumps(record) + "\n")
+        logger.info("ldsd_diag step=%d mu_ratio=%.3e cos_mu=%.3e cos_sel=%.3e C_mean=%.3e C_iso=%.3e",
+                    record["step"], diag["mu_ratio"], diag["cos_mu"], diag["cos_sel"],
+                    diag["C_mean"], diag["C_iso"])
 
     def create_closure(self, model, inputs):
         '''

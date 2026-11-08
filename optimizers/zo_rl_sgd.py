@@ -4,6 +4,7 @@ import numpy as np
 from typing import Optional, Dict, Any, Union, Iterable
 from gradient_pruning import fast_random_mask_like
 from .opt_utils import *
+from .ldsd_diagnostics import alignment_diagnostics
 from collections import defaultdict
 import wandb
 
@@ -97,6 +98,13 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         # Restore parameters to original state (undo perturbations)
         self.generator.manual_seed(self.zo_random_seed)
         self._mu_pertrub(scaling_factor=1)
+
+        # Alignment diagnostics at x_t with the policy mu_t that drew the candidates.
+        # The generator is reseeded right below, so the trajectory does not change.
+        if getattr(self, "diag_grads", None) is not None:
+            self.last_diag = alignment_diagnostics(self, self.diag_grads, seeds, optimal_seed,
+                                                   float(self.projected_grad))
+            self.diag_grads = None
 
         self.generator.manual_seed(self.zo_random_seed)
         for group_idx, group in enumerate(self.param_groups):

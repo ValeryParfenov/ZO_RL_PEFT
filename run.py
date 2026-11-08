@@ -288,6 +288,9 @@ class OurArguments(TrainingArguments):
     variance: float = 1e-3
     lr_mu: float = None 
     use_grad_first: bool = False
+    # zo_rl_sgd only: every N steps compute the true minibatch gradient and log alignment
+    # diagnostics to <output_dir>/ldsd_diag.jsonl (0 = off). Costs one backward per N steps.
+    ldsd_diag_every: int = 0
 
     # ZoAR (Qiu et al., 2025): K = k_value queries per step, history of N steps
     zoar_history: int = 15

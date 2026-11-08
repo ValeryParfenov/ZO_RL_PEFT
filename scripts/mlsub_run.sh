@@ -42,8 +42,12 @@ kill $MIRROR 2>/dev/null
 [[ -f $LOG ]] && cp "$LOG" "$OUT/stdout.log"
 [[ -f result/$NAME/results.json ]] && cp "result/$NAME/results.json" "$OUT/results.json"
 cp -r runs/lab-runs "$OUT/" 2>/dev/null
-echo "EXIT=$CODE $(date '+%F %T')"
+[[ -f result/$NAME/ldsd_diag.jsonl ]] && cp "result/$NAME/ldsd_diag.jsonl" "$OUT/"
+# The platform drops the last lines a job prints before it exits, so print everything
+# first and keep the container alive for a while before returning.
+tail -40 "$OUT/run.log"
 grep -oE "Evaluating at step [0-9]+|'test_acc': [0-9.]+, 'val_acc': [0-9.]+" "$OUT/stdout.log" 2>/dev/null | paste -d' ' - - | tail -60
 cat "$OUT/results.json" 2>/dev/null
-tail -40 "$OUT/run.log"
+echo "EXIT=$CODE $(date '+%F %T')"
+sleep 60
 exit 0
