@@ -583,6 +583,27 @@ class OurTrainer(Trainer):
                 def optimizer_log_func(metrics_dict, step):
                     _log_to_file_if_enabled(metrics_dict, step=step, log_dir=log_dir)
                 set_optimizer_log_func(optimizer_log_func)
+        elif args.trainer == "zoar":
+            self.optimizer = ZoAR(
+                params=params,
+                lr=args.learning_rate,
+                eps=args.zo_eps,
+                weight_decay=args.weight_decay,
+                betas=(args.beta1, args.beta2),
+                num_queries=args.k_value,
+                history=args.zoar_history,
+            )
+        elif args.trainer == "loren":
+            self.optimizer = LOREN(
+                params=params,
+                lr=args.learning_rate,
+                eps=args.zo_eps,
+                weight_decay=args.weight_decay,
+                momentum=args.momentum,
+                num_queries=args.k_value,
+                damping=args.loren_damping,
+                lr_cov=args.loren_lr_cov,
+            )
         else:
             # assert args.lr_scheduler_type == 'constant', "we did not implement lr_schedule."
             if args.optimizer == "adam": # FIXME: what to do with this? 

@@ -289,6 +289,12 @@ class OurArguments(TrainingArguments):
     lr_mu: float = None 
     use_grad_first: bool = False
 
+    # ZoAR (Qiu et al., 2025): K = k_value queries per step, history of N steps
+    zoar_history: int = 15
+    # LOREN (Seung et al., 2026): K = k_value queries per step
+    loren_damping: float = 0.1
+    loren_lr_cov: float = 1e-3
+
     # Local file logging
     log_to_file: bool = False  # whether to write training logs to local .txt files
     log_dir: str = None  # directory for log files; if None, will use "logs" (standalone folder)
@@ -767,7 +773,7 @@ def main():
     # Only auto-generate tag if not provided (empty string)
     if not args.tag:
         args.tag = f"{args.trainer}-{args.task_name}-{args.template_ver}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-STEP{args.max_steps}-{args.optimizer}-LR{args.learning_rate}-{args.scheduler}-ZOEPS{args.zo_eps}-Q{args.q}-MATRXSAMPLING{args.matrix_sampling_type}-TENSORSAMPLING{args.tensor_sampling_type}"
-        if args.trainer == "zo_rl_jaguar" or args.trainer == "zo_rl_sgd" or args.trainer == "zo_rl_adamm":
+        if args.trainer in ("zo_rl_jaguar", "zo_rl_sgd", "zo_rl_adamm", "zoar", "loren"):
             args.tag = f"{args.trainer}-{args.model_name.split('/')[-1]}-OPTIM_{args.mode}-{args.task_name}-LR{args.learning_rate}-LR_mu{args.lr_mu}-K{args.k_value}"
         args.tag = "momen" + args.tag if args.momentum > 0 else args.tag
         args.tag = f"sparse_grad-{args.gradient_sparsity}-{args.sparse_gradient_group}-{args.sparse_gradient_resample_steps}-" + args.tag if args.gradient_sparsity is not None else args.tag

@@ -12,10 +12,12 @@ from .zo_rl import ZO_RL
 from .zo_rl_sgd import ZO_RL_SGD
 from .zo_adamm import ZO_AdaMM
 from .zo_rl_adamm import ZO_RL_AdaMM
+from .zoar import ZoAR
+from .loren import LOREN
 # which optimizers will be added by calling *
 __all__ = [
     'ZO_MUON', 'ZO_SamplingMUON', 'Jaguar_MUON', 'Jaguar_SignSGD', 
     'ZO_SGD', 'ZO_SignSGD', 'ZO_Adam', 'ZO_Conserv',
     'Sparse_Jaguar_SignSGD', 'Sparse_Jaguar_MUON',
-    'ZO_RL', 'ZO_RL_SGD', 'ZO_AdaMM', 'ZO_RL_AdaMM'
+    'ZO_RL', 'ZO_RL_SGD', 'ZO_AdaMM', 'ZO_RL_AdaMM', 'ZoAR', 'LOREN'
 ]
