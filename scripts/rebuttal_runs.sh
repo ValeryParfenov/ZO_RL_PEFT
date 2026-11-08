@@ -54,6 +54,13 @@ case $METHOD in
     *) echo "unknown method $METHOD"; exit 1 ;;
 esac
 
+# Sweep overrides from the environment (set by scripts/run_job.sh): LR, MAX_STEPS, EVAL_STEPS.
+if [[ -n ${LR:-} ]]; then
+    OPT=$(sed -E "s/--learning_rate=[^ ]+/--learning_rate=$LR/" <<< "$OPT")
+    WHY="$WHY LR sweep: learning rate $LR."
+fi
+[[ -n ${MAX_STEPS:-} ]] && STEPS=$MAX_STEPS
+[[ -n ${EVAL_STEPS:-} ]] && EVAL=$EVAL_STEPS
 if [[ -n $STEPS_OVERRIDE ]]; then STEPS=$STEPS_OVERRIDE; EVAL=$STEPS; fi
 SAVE=$((2 * EVAL))
 [[ -n $STEPS_OVERRIDE ]] && SAVE=$EVAL
