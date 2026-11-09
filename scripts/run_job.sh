@@ -16,7 +16,7 @@ NAME="sst2-$MODEL-$MODE-$METHOD${SUFFIX:-}"
 # LR=auto: take the learning rate of the best finished, non-collapsed sweep run
 # result/sst2-<model>-<mode>-<method>-lr<value> (highest val accuracy of the best-dev-loss checkpoint).
 if [[ ${LR:-} == auto ]]; then
-    LR=$(python3 - "sst2-$MODEL-$MODE-$METHOD-lr" <<'EOF'
+    LR=$("${PYTHON:-python3}" - "sst2-$MODEL-$MODE-$METHOD-lr" <<'EOF'
 import glob, json, os, sys
 prefix = sys.argv[1]
 best = None
@@ -43,7 +43,7 @@ trap 'stop_child; exit 143' TERM INT
 
 while kill -0 "$CHILD" 2>/dev/null; do
     sleep 300 & wait $!
-    if python3 scripts/collapse_check.py "$LOG"; then
+    if "${PYTHON:-python3}" scripts/collapse_check.py "$LOG"; then
         mkdir -p runs/collapsed; date '+%F %T' > "runs/collapsed/$NAME"
         echo "$(date '+%F %T') COLLAPSE $NAME, stopping" >&2
         stop_child; exit 3
