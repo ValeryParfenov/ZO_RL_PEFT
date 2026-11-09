@@ -1,9 +1,10 @@
 """Exit 0 if a run has collapsed to the uniform answer, 1 otherwise.
 
-Collapse = the last 3 evaluations all have test accuracy in [0.44, 0.56] (chance on
-SST-2) and the mean of the last 100 logged train losses is within 0.03 of ln 2.
+Collapse = the last 3 evaluations all have test and dev accuracy in [0.44, 0.56] (chance
+on SST-2) and the mean of the last 100 logged train losses is within 0.03 of ln 2.
 Healthy runs never match both: early LDSD/greedy evals are far below chance (0.24-0.27,
 loss ~2), and once train loss is near ln 2 a healthy run is already above 0.8.
+Dev accuracy is checked too: a slow run (ZoAR LoRA, test ~0.55, dev ~0.60) is not collapsed.
 Usage: python3 scripts/collapse_check.py runs/<name>/stdout.log
 """
 import math
@@ -15,11 +16,11 @@ LOSS_RE = re.compile(r"'loss': ([0-9.]+)")
 
 
 def collapsed(text: str) -> bool:
-    tests = [float(m.group(1)) for m in ACC_RE.finditer(text)]
+    accs = [(float(m.group(1)), float(m.group(2))) for m in ACC_RE.finditer(text)]
     losses = [float(m.group(1)) for m in LOSS_RE.finditer(text)]
-    if len(tests) < 3 or len(losses) < 100:
+    if len(accs) < 3 or len(losses) < 100:
         return False
-    chance = all(0.44 <= t <= 0.56 for t in tests[-3:])
+    chance = all(0.44 <= a <= 0.56 for pair in accs[-3:] for a in pair)
     mean_loss = sum(losses[-100:]) / 100
     return chance and abs(mean_loss - math.log(2)) < 0.03
 
