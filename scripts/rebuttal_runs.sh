@@ -4,6 +4,7 @@
 # RoBERTa goes through AutoModelForCausalLM, as in the authors' dev-branch scripts (test 0.885-0.900).
 # The caller sets CUDA_DEVICE_ORDER / CUDA_VISIBLE_DEVICES.
 # LDSD_DIAG_EVERY=N (zo_rl_sgd only) logs alignment diagnostics every N steps to result/<name>/ldsd_diag.jsonl.
+# ZOAR_BASELINE=step (zoar only) centers the K losses of a step by their mean, see optimizers/zoar.py.
 #
 # Budget matching (forward passes per run, as in Table 1):
 #   ldsd, greedy : zo_rl_sgd, K=5 candidates + 2-sided step, 20k steps
@@ -74,4 +75,4 @@ NAME="sst2-${MODEL}-${MODE}-${METHOD}${SUFFIX}"
     --evaluation_strategy=steps --eval_steps=$EVAL \
     --save_strategy=steps --save_steps=$SAVE --save_total_limit=1 --load_best_model_at_end \
     --logging_steps=10 --report_to=none --no_use_wandb --overwrite_output_dir \
-    --perturbation_mode=two_side --weight_decay=0.0 $OPT ${LDSD_DIAG_EVERY:+--ldsd_diag_every=$LDSD_DIAG_EVERY}
+    --perturbation_mode=two_side --weight_decay=0.0 $OPT ${LDSD_DIAG_EVERY:+--ldsd_diag_every=$LDSD_DIAG_EVERY} ${ZOAR_BASELINE:+--zoar_baseline=$ZOAR_BASELINE}

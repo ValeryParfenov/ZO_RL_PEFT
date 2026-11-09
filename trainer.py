@@ -593,6 +593,7 @@ class OurTrainer(Trainer):
                 betas=(args.beta1, args.beta2),
                 num_queries=args.k_value,
                 history=args.zoar_history,
+                baseline=getattr(args, "zoar_baseline", "history"),
             )
         elif args.trainer == "loren":
             self.optimizer = LOREN(

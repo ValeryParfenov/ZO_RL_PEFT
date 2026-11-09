@@ -15,6 +15,13 @@ The history H keeps the last N*K pairs (u, y) as random seeds. Then
 The sums S_yu = sum y u and S_u = sum u are kept as running buffers, so a
 step regenerates only the K new and the K evicted directions instead of all
 N*K, and g = (S_yu - b S_u) / (mu (|H| - 1)).
+
+baseline="step" is our variant for minibatch training: in fine-tuning every step
+sees a new minibatch, and the loss differs between minibatches far more than
+between two directions on one minibatch, so y - b with b averaged over N steps is
+mostly minibatch noise. Here each step's K losses are centered by their own mean,
+y~_k = y_k - mean_j y_j (same minibatch), the centered values are kept in the history,
+and g = sum_H y~ u / (mu |H| (1 - 1/K)); E[(y_k - mean y) u_k] = (1 - 1/K) E[y_k u_k].
 """
 from collections import deque
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
@@ -39,6 +46,7 @@ class ZoAR(ZeroOrderOptimizer):
         tensor_sampling_type: str = "standard_normal",
         matrix_sampling_type: Optional[str] = None,
         perturbation_mode: str = "one_side",
+        baseline: str = "history",
     ):
         super().__init__(
             params,
@@ -51,6 +59,9 @@ class ZoAR(ZeroOrderOptimizer):
         )
         if num_queries * history < 2:
             raise ValueError("ZoAR needs at least 2 samples in the history (K * N >= 2)")
+        if baseline not in ("history", "step") or (baseline == "step" and num_queries < 2):
+            raise ValueError("baseline must be 'history' or 'step' (the latter needs K >= 2)")
+        self.baseline = baseline
         self.num_queries = num_queries
         self.history = history
         self.adam_eps = adam_eps
@@ -99,6 +110,9 @@ class ZoAR(ZeroOrderOptimizer):
                 first_loss = loss
             new_samples.append((seed, loss.item()))
 
+        if self.baseline == "step":
+            mean_y = sum(y for _, y in new_samples) / len(new_samples)
+            new_samples = [(seed, y - mean_y) for seed, y in new_samples]
         for seed, y in new_samples:
             self.buffer.append((seed, y))
             self._accumulate(seed, y, sign=1.0)
@@ -107,11 +121,14 @@ class ZoAR(ZeroOrderOptimizer):
             self._accumulate(seed, y, sign=-1.0)
 
         n = len(self.buffer)
-        baseline = sum(y for _, y in self.buffer) / n
+        if self.baseline == "step":
+            baseline, denom_n = 0.0, n * (1.0 - 1.0 / self.num_queries)
+        else:
+            baseline, denom_n = sum(y for _, y in self.buffer) / n, n - 1
         for group in self.param_groups:
             beta1, beta2 = group['betas']
             lr = group['lr']
-            scale = 1.0 / (group['eps'] * (n - 1))
+            scale = 1.0 / (group['eps'] * denom_n)
             for p in group['params']:
                 state = self.state[p]
                 state['step'] += 1

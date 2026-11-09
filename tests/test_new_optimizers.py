@@ -59,6 +59,27 @@ def test_zoar_decreases_loss() -> None:
     assert after < 0.5 * before, (before, after)
 
 
+def test_zoar_step_baseline_survives_minibatch_noise() -> None:
+    """A per-step loss offset (a new minibatch every step) leaves the step baseline untouched."""
+    results = {}
+    for mode in ("history", "step"):
+        params, base = _quadratic_problem()
+        gen = torch.Generator().manual_seed(1)
+        offset = [0.0]
+
+        def closure():
+            return base() + offset[0]
+
+        before = base().item()
+        opt = ZoAR(params, lr=5e-3, eps=1e-2, num_queries=2, history=5, baseline=mode)
+        for _ in range(2000):
+            offset[0] = 5.0 * torch.randn(1, generator=gen).item()
+            opt.step(closure)
+        results[mode] = base().item() / before
+    logger.info("relative loss after 2000 noisy steps: %s", results)
+    assert results["step"] < 0.5, results
+
+
 def test_loren_decreases_loss_and_restores_params() -> None:
     params, closure = _quadratic_problem()
     opt = LOREN(params, lr=1e-3, eps=1e-3, momentum=0.9, num_queries=6, damping=0.1, lr_cov=1e-3)

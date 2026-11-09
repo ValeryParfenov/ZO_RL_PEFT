@@ -294,6 +294,7 @@ class OurArguments(TrainingArguments):
 
     # ZoAR (Qiu et al., 2025): K = k_value queries per step, history of N steps
     zoar_history: int = 15
+    zoar_baseline: str = "history"  # "step": same-minibatch baseline, see optimizers/zoar.py
     # LOREN (Seung et al., 2026): K = k_value queries per step
     loren_damping: float = 0.1
     loren_lr_cov: float = 1e-3
