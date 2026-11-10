@@ -4,6 +4,7 @@
 # RoBERTa goes through AutoModelForCausalLM, as in the authors' dev-branch scripts (test 0.885-0.900).
 # The caller sets CUDA_DEVICE_ORDER / CUDA_VISIBLE_DEVICES.
 # LDSD_DIAG_EVERY=N (zo_rl_sgd only) logs alignment diagnostics every N steps to result/<name>/ldsd_diag.jsonl.
+# ZOAR_HISTORY=N (zoar only) sets the history depth N, default 15 (the paper uses 15 or 50).
 # ZOAR_BASELINE=step (zoar only) centers the K losses of a step by their mean, see optimizers/zoar.py.
 #
 # Budget matching (forward passes per run, as in Table 1):
@@ -50,7 +51,7 @@ case $METHOD in
         WHY="Baseline LOREN (Seung et al. 2026), 6 queries per step, same forward budget as LDSD." ;;
     zoar)
         STEPS=60000; EVAL=1500
-        OPT="--trainer=zoar --learning_rate=$ZOAR_LR --k_value=2 --zoar_history=15 --zo_eps=1e-2 --beta1=0.9 --beta2=0.999"
+        OPT="--trainer=zoar --learning_rate=$ZOAR_LR --k_value=2 --zoar_history=${ZOAR_HISTORY:-15} --zo_eps=1e-2 --beta1=0.9 --beta2=0.999"
         WHY="Baseline ZoAR (Qiu et al. 2025), 2 queries per step and 3x steps, same forward budget as LDSD." ;;
     *) echo "unknown method $METHOD"; exit 1 ;;
 esac
