@@ -1,15 +1,19 @@
 #!/bin/bash
 # Extra baselines for ZO-LDSD on SST-2 (Table 1 of the paper).
-# Usage: scripts/rebuttal_runs.sh <opt13|roberta> <lora|ft> <ldsd|greedy|loren|zoar> [steps_override] [name_suffix]
+# Usage: scripts/rebuttal_runs.sh <opt13|roberta> <lora|ft> <ldsd|greedy|mean|gauss1|gauss5|loren|zoar> [steps_override] [name_suffix]
 # RoBERTa goes through AutoModelForCausalLM, as in the authors' dev-branch scripts (test 0.885-0.900).
 # The caller sets CUDA_DEVICE_ORDER / CUDA_VISIBLE_DEVICES.
 # LDSD_DIAG_EVERY=N (zo_rl_sgd only) logs alignment diagnostics every N steps to result/<name>/ldsd_diag.jsonl.
 # ZOAR_HISTORY=N (zoar only) sets the history depth N, default 15 (the paper uses 15 or 50).
 # ZO_EPS=x (zoar only) sets the perturbation scale mu, default 1e-2 (the paper's LoRA value).
+# SEED=n sets the training seed (--seed: directions, initialization); the data split stays train_set_seed=0.
 # ZOAR_BASELINE=step (zoar only) centers the K losses of a step by their mean, see optimizers/zoar.py.
 #
 # Budget matching (forward passes per run, as in Table 1):
 #   ldsd, greedy : zo_rl_sgd, K=5 candidates + 2-sided step, 20k steps
+#   mean         : zo_rl_sgd, K=5 candidates + 2-sided steps along the best 3, averaged (Fig. 3d), 20k steps
+#   gauss1       : zo_sgd, one 2-sided Gaussian estimate,     60k steps (Table 1 "K=1, more iterations")
+#   gauss5       : zo_sgd, mean of 5 2-sided Gaussian estimates, 20k steps ("K=5, same iterations")
 #   loren        : 6 one-sided queries per step,             20k steps
 #   zoar         : 2 one-sided queries per step,             60k steps (3x)
 set -euo pipefail
@@ -46,6 +50,18 @@ case $METHOD in
         STEPS=20000; EVAL=500
         OPT="--trainer=zo_rl_sgd --learning_rate=$SGD_LR --momentum=0.9 --k_value=5 --variance=1 --lr_mu=0 --zo_eps=1e-3"
         WHY="Ablation: ZO-SGD with Gaussian sampling, K=5 and greedy argmin, mu frozen at 0. If it matches LDSD, the gain comes from selection, not from learning mu." ;;
+    mean)
+        STEPS=20000; EVAL=500
+        OPT="--trainer=zo_rl_sgd --learning_rate=$SGD_LR --momentum=0.9 --k_value=5 --variance=1 --lr_mu=1e-3 --zo_eps=1e-3 --zo_rl_sgd_candidate_selection_strategy=mean --zo_rl_sgd_candidate_average_count=3"
+        WHY="Ablation (Fig. 3d): Algorithm 2 with the argmin replaced by the mean of the 3 best candidates' estimates." ;;
+    gauss1)
+        STEPS=60000; EVAL=1500
+        OPT="--trainer=zo_sgd --learning_rate=$SGD_LR --momentum=0.9 --zo_eps=1e-3 --zo_sgd_k=1"
+        WHY="Table 1 baseline: ZO-SGD, Gaussian K=1, more iterations." ;;
+    gauss5)
+        STEPS=20000; EVAL=500
+        OPT="--trainer=zo_sgd --learning_rate=$SGD_LR --momentum=0.9 --zo_eps=1e-3 --zo_sgd_k=5"
+        WHY="Table 1 baseline: ZO-SGD, Gaussian K=5 averaged, same iterations." ;;
     loren)
         STEPS=20000; EVAL=500
         OPT="--trainer=loren --learning_rate=$SGD_LR --momentum=0.9 --k_value=6 --zo_eps=1e-3 --loren_damping=0.1 --loren_lr_cov=1e-3"
@@ -71,7 +87,7 @@ NAME="sst2-${MODEL}-${MODE}-${METHOD}${SUFFIX}"
 
 "${PYTHON:-$HOME/venvs/zoldsd/bin/python}" scripts/launch_run.py --name "$NAME" --objective "$WHY" -- \
     --model_name=$HF --task_name=SST2 $LORA_FLAG \
-    --num_train=1000 --num_dev=500 --num_eval=1000 --train_as_classification --train_set_seed=0 \
+    --num_train=1000 --num_dev=500 --num_eval=1000 --train_as_classification --train_set_seed=0 ${SEED:+--seed=$SEED} \
     --per_device_train_batch_size=16 --max_steps=$STEPS --num_training_steps=$STEPS \
     --scheduler=cosine --warmup_steps=0 --min_lr_ratio=0.1 --scheduler_cycle_length=1 \
     --evaluation_strategy=steps --eval_steps=$EVAL \

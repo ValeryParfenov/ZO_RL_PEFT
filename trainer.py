@@ -469,7 +469,7 @@ class OurTrainer(Trainer):
         if args.trainer == "zo_adam":
             self.optimizer = ZO_Adam(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "zo_sgd":
-            self.optimizer = ZO_SGD(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
+            self.optimizer = ZO_SGD(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type, k=getattr(args, "zo_sgd_k", 1))
         elif args.trainer == "zo_signsgd":
             self.optimizer = ZO_SignSGD(params, lr=args.learning_rate, eps=args.zo_eps, momentum=args.momentum, perturbation_mode=args.perturbation_mode, tensor_sampling_type=args.tensor_sampling_type, matrix_sampling_type=args.matrix_sampling_type)
         elif args.trainer == "zo_conserv":
@@ -535,18 +535,20 @@ class OurTrainer(Trainer):
                     loss = loss.mean()
                 loss.backward()
             self.optimizer = ZO_RL_SGD(
-                params=params, 
-                lr=args.learning_rate, 
-                eps=args.zo_eps, 
+                params=params,
+                lr=args.learning_rate,
+                eps=args.zo_eps,
                 momentum=args.momentum,
                 weight_decay=args.weight_decay,
                 tensor_sampling_type=args.tensor_sampling_type,
                 matrix_sampling_type=args.matrix_sampling_type,
                 perturbation_mode=args.perturbation_mode,
-                k=args.k_value, 
-                variance=args.variance, 
-                lr_mu=args.lr_mu, 
-                use_grad_first=args.use_grad_first
+                k=args.k_value,
+                variance=args.variance,
+                lr_mu=args.lr_mu,
+                use_grad_first=args.use_grad_first,
+                candidate_selection=getattr(args, "zo_rl_sgd_candidate_selection_strategy", "best"),
+                candidate_average_count=getattr(args, "zo_rl_sgd_candidate_average_count", 3),
             )
             # Set logging function for optimizer if file logging is enabled
             if hasattr(args, 'log_to_file') and args.log_to_file:

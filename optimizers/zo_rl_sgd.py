@@ -22,6 +22,8 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
             variance: float = 1.0,
             lr_mu: Optional[float] = None,
             use_grad_first: bool = False,
+            candidate_selection: str = "best",
+            candidate_average_count: int = 3,
     ):
         super().__init__(
             params,
@@ -37,7 +39,14 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         self.variance = variance
         self.lr_mu = lr_mu if lr_mu is not None else lr
         self.use_grad_first = use_grad_first
-        
+        # "best": Algorithm 2 (argmin over the k candidates). "mean": the Fig. 3d ablation from
+        # the authors' dev branch, which averages the two-sided estimates of the
+        # candidate_average_count lowest-loss candidates; mu is learned the same way.
+        if candidate_selection not in ("best", "mean"):
+            raise ValueError(f"candidate_selection must be best or mean, got {candidate_selection}")
+        self.candidate_selection = candidate_selection
+        self.candidate_average_count = max(1, candidate_average_count)
+
         for group in self.param_groups:
             for param in group['params']:
                 state = self.state[param]
@@ -75,15 +84,20 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
         
         # self.zo_random_seed = np.random.randint(1_000_000_000)
 
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=1)
-        loss1 = closure()
+        mean_grads = None
+        if self.candidate_selection == "mean":
+            # parameters come back restored; mean_grads holds the averaged estimate per parameter
+            mean_grads, loss1 = self._mean_estimate(loss_values, closure)
+        else:
+            self.generator.manual_seed(self.zo_random_seed)
+            self._mu_pertrub(scaling_factor=1)
+            loss1 = closure()
 
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=-2)
-        loss2 = closure()
-        
-        self.projected_grad = (loss1 - loss2) / 2
+            self.generator.manual_seed(self.zo_random_seed)
+            self._mu_pertrub(scaling_factor=-2)
+            loss2 = closure()
+
+            self.projected_grad = (loss1 - loss2) / 2
 
         seeds = list(loss_values.keys())
         f_tensor = torch.tensor(list(loss_values.values()))
@@ -96,8 +110,9 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
 
 
         # Restore parameters to original state (undo perturbations)
-        self.generator.manual_seed(self.zo_random_seed)
-        self._mu_pertrub(scaling_factor=1)
+        if mean_grads is None:
+            self.generator.manual_seed(self.zo_random_seed)
+            self._mu_pertrub(scaling_factor=1)
 
         # Alignment diagnostics at x_t with the policy mu_t that drew the candidates.
         # The generator is reseeded right below, so the trajectory does not change.
@@ -117,9 +132,12 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
                 state['step'] += 1
                 device = param.device
 
-                mu = state['mu']
-                z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
-                grad = (z * self.projected_grad) / eps
+                if mean_grads is not None:
+                    grad = mean_grads[param]
+                else:
+                    mu = state['mu']
+                    z = torch.normal(mean=mu, std=self.variance, generator=self.generator).to(device)
+                    grad = (z * self.projected_grad) / eps
                 if momentum is not None and momentum != 0:
                     if 'momentum_buffer' not in state:
                         buf = state['momentum_buffer'] = torch.clone(grad).detach()
@@ -202,6 +220,38 @@ class ZO_RL_SGD(ZeroOrderOptimizer):
 
         return loss1
     
+    @torch.no_grad()
+    def _mean_estimate(self, loss_values, closure):
+        """Fig. 3d variant: two-sided estimates along the lowest-loss candidates, averaged.
+
+        Returns ({param: averaged gradient estimate}, mean of the "+" losses); parameters are
+        left unperturbed and self.projected_grad holds the mean projected gradient.
+        """
+        selected = sorted(loss_values, key=loss_values.get)[:self.candidate_average_count]
+        proj, plus = [], []
+        for seed in selected:
+            self.generator.manual_seed(seed)
+            self._mu_pertrub(scaling_factor=1)
+            loss1 = closure()
+            self.generator.manual_seed(seed)
+            self._mu_pertrub(scaling_factor=-2)
+            loss2 = closure()
+            self.generator.manual_seed(seed)
+            self._mu_pertrub(scaling_factor=1)
+            proj.append(float((loss1 - loss2) / 2))
+            plus.append(loss1)
+        self.projected_grad = sum(proj) / len(proj)
+        grads = {}
+        for seed, pg in zip(selected, proj):
+            self.generator.manual_seed(seed)
+            for group in self.param_groups:
+                for param in group['params']:
+                    z = torch.normal(mean=self.state[param]['mu'], std=self.variance,
+                                     generator=self.generator).to(param.device)
+                    g = z * (pg / (group['eps'] * len(selected)))
+                    grads[param] = g if param not in grads else grads[param].add_(g)
+        return grads, sum(plus) / len(plus)
+
     def _mu_pertrub(self, scaling_factor: float = 1.0):
         for group in self.param_groups:
             eps = group['eps']

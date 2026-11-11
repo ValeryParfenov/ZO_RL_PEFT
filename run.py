@@ -291,6 +291,12 @@ class OurArguments(TrainingArguments):
     # zo_rl_sgd only: every N steps compute the true minibatch gradient and log alignment
     # diagnostics to <output_dir>/ldsd_diag.jsonl (0 = off). Costs one backward per N steps.
     ldsd_diag_every: int = 0
+    # zo_rl_sgd only: "best" = Algorithm 2 (argmin), "mean" = Fig. 3d ablation (average of the
+    # candidate_average_count lowest-loss candidates), names as in the authors' dev branch
+    zo_rl_sgd_candidate_selection_strategy: str = "best"
+    zo_rl_sgd_candidate_average_count: int = 3
+    # zo_sgd only: average this many two-sided Gaussian estimates per step (Table 1 "Gaussian, K")
+    zo_sgd_k: int = 1
 
     # ZoAR (Qiu et al., 2025): K = k_value queries per step, history of N steps
     zoar_history: int = 15
